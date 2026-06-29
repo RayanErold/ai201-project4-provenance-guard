@@ -39,3 +39,29 @@ def test_label_generator_matches_band():
     assert "AI-generated" in scoring.label_generator(0.9)
     assert "inconclusive" in scoring.label_generator(0.5)
     assert "human-typical" in scoring.label_generator(0.1)
+
+
+def test_even_weights_text():
+    # If llm=0.9, stylometric=0.6, metadata=0.3
+    # S = 1/3 * 0.9 + 1/3 * 0.6 + 1/3 * 0.3 = 0.3 + 0.2 + 0.1 = 0.6
+    score = scoring.weighted_confidence({"llm": 0.9, "stylometric": 0.6, "metadata": 0.3}, source="text")
+    assert abs(score - 0.6) < 1e-4
+
+
+def test_even_weights_image():
+    # S = 0.5 * llm + 0.5 * metadata (stylometric is ignored)
+    # S = 0.5 * 0.8 + 0.5 * 0.2 = 0.5
+    score = scoring.weighted_confidence({"llm": 0.8, "stylometric": 0.1, "metadata": 0.2}, source="image")
+    assert abs(score - 0.5) < 1e-4
+
+
+def test_run_signals_image_captions():
+    # Test that run_signals extracts caption and runs image_artifact_signal
+    text = "[image transcript of 'test.png'] A smooth image depicting unnatural structures and impossible geometry."
+    metadata = {"vlm_captioned": True}
+    res = signals.run_signals(text, metadata, source="image")
+    assert "llm" in res
+    assert "stylometric" in res
+    assert res["stylometric"] == 0.5
+    assert "metadata" in res
+

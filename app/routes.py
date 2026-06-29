@@ -89,8 +89,8 @@ def submit():
     normalized = normalize(text=text, file_path=file_path)
     metadata = {**normalized.get("metadata", {}), **extra_metadata}
 
-    signals = run_signals(normalized["text"], metadata)
-    result = classify(signals)
+    signals = run_signals(normalized["text"], metadata, source=normalized["source"])
+    result = classify(signals, source=normalized["source"])
 
     content_id = str(uuid.uuid4())
     audit = current_app.audit

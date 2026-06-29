@@ -11,6 +11,9 @@ from typing import Any
 
 WEIGHTS = {"llm": 0.5, "stylometric": 0.3, "metadata": 0.2}
 
+TEXT_WEIGHTS = {"llm": 1.0 / 3.0, "stylometric": 1.0 / 3.0, "metadata": 1.0 / 3.0}
+IMAGE_WEIGHTS = {"llm": 0.5, "metadata": 0.5}
+
 LABELS = {
     "ai": "This content shows strong indicators of being AI-generated.",
     "uncertain": "Attribution inconclusive. Contextual verification recommended.",
@@ -18,12 +21,13 @@ LABELS = {
 }
 
 
-def weighted_confidence(signals: dict[str, float]) -> float:
+def weighted_confidence(signals: dict[str, float], source: str = "text") -> float:
     """Combine signal scores via weighted average. Returns float in [0, 1]."""
-    total_weight = sum(WEIGHTS[k] for k in signals if k in WEIGHTS)
+    weights = IMAGE_WEIGHTS if source == "image" else TEXT_WEIGHTS
+    total_weight = sum(weights[k] for k in signals if k in weights)
     if total_weight == 0:
         return 0.5
-    score = sum(signals[k] * WEIGHTS[k] for k in signals if k in WEIGHTS)
+    score = sum(signals[k] * weights[k] for k in signals if k in weights)
     return round(score / total_weight, 4)
 
 
@@ -46,12 +50,13 @@ def label_generator(confidence: float) -> str:
     return LABELS["human"]
 
 
-def classify(signals: dict[str, float]) -> dict[str, Any]:
+def classify(signals: dict[str, float], source: str = "text") -> dict[str, Any]:
     """Full classification result from raw signal scores."""
-    confidence = weighted_confidence(signals)
+    confidence = weighted_confidence(signals, source=source)
     return {
         "confidence": confidence,
         "attribution": attribution_for(confidence),
         "label": label_generator(confidence),
         "signals": signals,
     }
+

@@ -115,8 +115,55 @@ def metadata_signal(metadata: dict[str, Any] | None) -> float:
     return 0.4
 
 
-def run_signals(text: str, metadata: dict[str, Any] | None = None) -> dict[str, float]:
-    """Run all three signals and return their raw scores."""
+def image_artifact_signal(caption: str) -> float:
+    """Analyze the VLM image description for mentions of AI visual artifacts.
+
+    Fails safe to 0.5 (Uncertain).
+    """
+    api_key = os.getenv("GROQ_API_KEY")
+    if not caption or not caption.strip():
+        return 0.5
+    if Groq is None or not api_key or api_key == "your_groq_api_key_here":
+        return 0.5
+
+    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    client = Groq(api_key=api_key)
+    prompt = (
+        "You are an AI-content detector. Analyze the following description of an image "
+        "and estimate the probability that the image itself is AI-generated based on the "
+        "description (e.g., look for mentions of visual artifacts, impossible geometry, "
+        "malformed details, or unnatural/over-smooth features). "
+        "Respond ONLY with a JSON object: {\"ai_probability\": <float 0..1>}.\n\n"
+        f"IMAGE DESCRIPTION:\n{caption}"
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(resp.choices[0].message.content)
+        return _clamp(float(data.get("ai_probability", 0.5)))
+    except Exception:
+        return 0.5
+
+
+def run_signals(text: str, metadata: dict[str, Any] | None = None, source: str = "text") -> dict[str, float]:
+    """Run signals and return their raw scores, adapted to the source type."""
+    if source == "image" and metadata and metadata.get("vlm_captioned"):
+        # Extract the caption from the transcript text.
+        # The text is formatted as: "[image transcript of '<name>'] <caption_text>"
+        # or "[image transcript] <caption_text>"
+        idx = text.find("] ")
+        caption = text[idx + 2:] if idx != -1 else text
+        
+        return {
+            "llm": image_artifact_signal(caption),
+            "stylometric": 0.5,  # Ignored by weights for image
+            "metadata": metadata_signal(metadata),
+        }
+
     return {
         "llm": llm_signal(text),
         "stylometric": stylometric_signal(text),
@@ -126,3 +173,4 @@ def run_signals(text: str, metadata: dict[str, Any] | None = None) -> dict[str, 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, value))
+
